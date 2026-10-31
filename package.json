@@ -1,0 +1,69 @@
+{
+  "name": "ot-tracsa",
+  "productName": "OT TRACSA",
+  "version": "1.0.0",
+  "description": "OT Almacén TRACSA para Windows",
+  "main": "src/main.js",
+  "author": "TRACSA",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/run_all.js",
+    "dist": "electron-builder --win nsis --x64 --publish never"
+  },
+  "dependencies": {
+    "pdfjs-dist": "4.4.168",
+    "tesseract.js": "5.1.1"
+  },
+  "devDependencies": {
+    "electron": "31.7.7",
+    "electron-builder": "24.13.3"
+  },
+  "build": {
+    "appId": "mx.tracsa.otalmacen",
+    "productName": "OT TRACSA",
+    "artifactName": "OT_TRACSA_Setup.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/logo_tracsa.png",
+      "assets/icon.ico",
+      "node_modules/tesseract.js/**/*",
+      "node_modules/tesseract.js-core/**/*",
+      "node_modules/pdfjs-dist/build/pdf.min.mjs",
+      "node_modules/pdfjs-dist/build/pdf.worker.min.mjs",
+      "node_modules/pdfjs-dist/package.json",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/tesseract.js/**/*",
+      "node_modules/tesseract.js-core/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "shortcutName": "OT TRACSA"
+    },
+    "extraResources": [
+      {
+        "from": "assets/tessdata",
+        "to": "tessdata"
+      }
+    ]
+  }
+}
