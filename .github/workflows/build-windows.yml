@@ -1,0 +1,50 @@
+name: Build OT TRACSA (Windows)
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Los datos de Telegram vienen de los secretos de GitHub; no están en el código
+      - name: Crear config.json con los secretos
+        shell: pwsh
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_FOTOS_KEY: ${{ secrets.TG_FOTOS_KEY }}
+        run: |
+          $c = @{ TG_BOT_TOKEN = $env:TG_BOT_TOKEN; TG_CHAT_ID = $env:TG_CHAT_ID; TG_FOTOS_KEY = $env:TG_FOTOS_KEY }
+          $c | ConvertTo-Json | Set-Content -Path src/config.json -Encoding utf8
+
+      - name: Descargar el idioma español del OCR
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path assets/tessdata | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tessdata_fast/raw/main/spa.traineddata" -OutFile assets/tessdata/spa.traineddata
+          if ((Get-Item assets/tessdata/spa.traineddata).Length -lt 1000000) { throw "No se descargó spa.traineddata" }
+
+      - name: Instalar dependencias
+        run: npm install --no-audit --no-fund
+
+      - name: Pruebas de la lógica
+        run: npm test
+
+      - name: Crear el instalador .exe
+        run: npm run dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OT_TRACSA_Windows
+          path: dist/OT_TRACSA_Setup.exe
