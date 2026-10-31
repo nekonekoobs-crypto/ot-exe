@@ -34,7 +34,7 @@ jobs:
           if ((Get-Item assets/tessdata/spa.traineddata).Length -lt 1000000) { throw "No se descargó spa.traineddata" }
 
       - name: Instalar dependencias
-        run: npm install --no-audit --no-fund
+        run: npm install --omit=optional --no-audit --no-fund
 
       - name: Pruebas de la lógica
         run: npm test
