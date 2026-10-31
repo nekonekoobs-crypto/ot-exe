@@ -64,6 +64,9 @@
         "from": "assets/tessdata",
         "to": "tessdata"
       }
-    ]
+    ],
+    "npmRebuild": false,
+    "nodeGypRebuild": false,
+    "buildDependenciesFromSource": false
   }
 }
