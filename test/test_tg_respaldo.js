@@ -17,7 +17,7 @@ const { Telegram } = require('../src/lib/telegram'); const { Store } = require('
   assert.ok((await tg.bajar(a.fileId, '123/x.jpg')).equals(foto)); await assert.rejects(tg.bajar(a.fileId, '123/otra.jpg')); await assert.rejects(tg.bajar('nada', 'x'));
   await tg.borrar(a.mensajeId); assert.strictEqual(borrado.message_id, a.mensajeId);
   // compat con formato Android/WebCrypto/Java: IV(12)||ct+tag, AAD utf8 — verificado con openssl vía Python más abajo
-  fs.writeFileSync('/tmp/tg_vec.json', JSON.stringify({ key, ruta: '123/x.jpg', datos: foto.toString('base64'), cif: tg.cifrar(foto, '123/x.jpg').toString('base64') }));
+  fs.writeFileSync(path.join(os.tmpdir(), 'tg_vec.json'), JSON.stringify({ key, ruta: '123/x.jpg', datos: foto.toString('base64'), cif: tg.cifrar(foto, '123/x.jpg').toString('base64') }));
   srv.close();
   // respaldo
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ot-')); const st = new Store(dir + '/a');
@@ -29,5 +29,5 @@ const { Telegram } = require('../src/lib/telegram'); const { Store } = require('
   const st2 = new Store(dir + '/b'); const r = R.restaurar(st2, z); assert.strictEqual(r.ordenes.length, 2); assert.ok(st2.leerFoto('11_1.jpg').equals(foto)); assert.strictEqual(st2.cargar(11).items[0].concepto, 'Faro');
   assert.throws(() => R.inspeccionar(require('../src/lib/zip').crearZip([{ name: 'x.txt', data: Buffer.from('x') }])));
   assert.throws(() => st2.rutaFoto('../x'));
-  fs.writeFileSync('/tmp/resp_prueba.zip', z); console.log('OK telegram + respaldo');
+  fs.writeFileSync(path.join(os.tmpdir(), 'resp_prueba.zip'), z); console.log('OK telegram + respaldo');
 })().catch((e) => { console.error(e); process.exit(1); });
