@@ -175,7 +175,7 @@
     let h = `<div class="nav-group"><div class="nav-label">Órdenes</div>${item('lista', 'lista', 'Órdenes de trabajo')}${ro ? '' : item('nueva', 'mas', 'Nueva OT')}</div>`;
     if (!ro) h += `<div class="nav-group"><div class="nav-label">Capturar</div>${item('foto-camara', 'camara', 'Tomar foto')}${item('foto-archivo', 'imagen', 'Elegir foto del equipo')}${item('importar', 'archivo', 'Importar Excel, Word o PDF')}</div>`;
     if (!ro) h += `<div class="nav-group"><div class="nav-label">Administración</div>${item('usuarios', 'usuarios', 'Dar de alta usuarios', S.usuariosPend > 0 ? `<span class="badge badge-red nav-sinc-badge">${S.usuariosPend}</span>` : '')}</div>`;
-    h += `<div class="nav-group"><div class="nav-label">Copias de seguridad</div>${item('respaldar', 'guardar', 'Hacer copia ahora')}${ro ? '' : item('cargar-respaldo', 'subir', 'Cargar copia de seguridad')}${item('carpeta-respaldos', 'carpeta', 'Abrir carpeta de copias')}</div>`;
+    h += `<div class="nav-group"><div class="nav-label">Copias de seguridad</div>${item('respaldar', 'guardar', 'Hacer copia ahora')}${ro ? '' : item('cargar-respaldo', 'subir', 'Cargar copia de seguridad')}${item('carpeta-respaldos', 'carpeta', 'Abrir carpeta de copias')}</div><div class="nav-group"><div class="nav-label">Ayuda</div>${item('probar-tg', 'subir', 'Probar Telegram (fotos)')}</div>`;
     $('#menu').innerHTML = h;
   }
   function migas(partes) { $('#migas').innerHTML = partes.map((p, i, a) => (i ? '<span class="sep" aria-hidden="true">›</span>' : '') + `<span${i === a.length - 1 ? ' class="current"' : ''}>${esc(p)}</span>`).join(''); }
@@ -191,7 +191,8 @@
     const q = S.busqueda.trim(); const lista = q ? S.ordenes.filter((o) => M.coincide(o, q)) : S.ordenes;
     const tot = { alta: 0, baja: 0, prestamo: 0, devolucion: 0, sobrante: 0 };
     for (const o of lista) { const c = M.cuenta(o); for (const e of M.ESTADOS) tot[e] += c[e]; }
-    let h = `<div class="page-header"><div class="page-header-row"><div><div class="page-pretitle">Almacén</div><h1 class="page-title">Órdenes de trabajo (${lista.length})</h1></div>
+    let h = (S.estado && !S.estado.telegram) ? '<div class="card" style="margin-bottom:12px;border-color:#f59f00"><div class="card-body"><b>Telegram no está configurado en esta instalación.</b> Sin él no se pueden ver ni subir fotos. Faltan los secretos TG_BOT_TOKEN, TG_CHAT_ID y TG_FOTOS_KEY al compilar (revisa la guía).</div></div>' : '';
+    h += `<div class="page-header"><div class="page-header-row"><div><div class="page-pretitle">Almacén</div><h1 class="page-title">Órdenes de trabajo (${lista.length})</h1></div>
       <div class="page-actions">${soloLectura() ? '' : '<button class="btn btn-primary" data-acc="nueva">+ Nueva OT</button>'}</div></div></div>`;
     h += '<div class="fila-stats">' + M.ESTADOS.map((e) => `<div class="stat-color" style="background:${COLOR[e]}"><div class="n">${tot[e]}</div><div class="t">${ETQ[e]}</div></div>`).join('') + '</div>';
     if (!lista.length) h += `<div class="card"><div class="vacio">${q ? 'No hay OT que coincidan con la búsqueda.' : 'Todavía no hay órdenes. Usa “Nueva OT”, una foto o importa un archivo.'}</div></div>`;
@@ -296,7 +297,7 @@
     } catch (e) { toast('No se pudo guardar la foto: ' + e.message, 'error'); } finally { ocupado(''); }
   }
   async function verFoto(id, nombre) {
-    const u = await urlFoto(nombre); if (!u) { toast('La foto todavía no se ha descargado. Sincroniza e inténtalo otra vez.', 'error'); return; }
+    const u = await urlFoto(nombre); if (!u) { toast('La foto no se ha descargado. ' + ($('#estado-sync').textContent || 'Sincroniza e inténtalo otra vez.'), 'error'); return; }
     const campo = itemPorId(id) && itemPorId(id).fotoPrestamo === nombre ? 'fotoPrestamo' : 'fotoBaja';
     const r = await ventana({ titulo: 'Foto', clase: 'ancha visor', cuerpo: `<img src="${u}" alt="Foto">`, botones: [editableActual() ? { texto: 'Eliminar foto', valor: 'borrar', clase: 'btn-peligro' } : null, { texto: 'Cerrar', valor: null }].filter((x) => x) });
     if (r === 'borrar' && (await confirmar('Eliminar foto', '¿Estás seguro de eliminar esta foto?', 'Eliminar', true))) {
@@ -404,7 +405,7 @@
     try {
       const r = await api('sincronizar', bajar);
       if (r.sinSesion) { await mostrarLogin('Tu sesión se cerró o ya no tienes acceso. Vuelve a entrar.'); return; }
-      pintarSync(r.mensaje, /Error|Sin conexión/.test(r.mensaje)); if (r.usuariosPendientes >= 0) { S.usuariosPend = r.usuariosPendientes; }
+      pintarSync(r.mensaje, /Error|Sin conexión|sin descargar|sin subir/.test(r.mensaje)); if (r.usuariosPendientes >= 0) { S.usuariosPend = r.usuariosPendientes; }
       await refrescarEstado(); await refrescarOrdenes();
       if (S.vista === 'lista') pintarLista(); pintarMenu();
     } catch (e) { pintarSync(e.message, true); } finally { S.sincronizando = false; }
@@ -440,6 +441,14 @@
       case 'usuarios': pintarUsuarios(); break;
       case 'respaldar': hacerCopia(); break;
       case 'cargar-respaldo': cargarCopia(); break;
+      case 'probar-tg': {
+        ocupado('Probando Telegram…');
+        try {
+          const r = await api('probarTelegram');
+          await ventana({ titulo: r.ok ? 'Telegram funciona' : 'Telegram tiene un problema', cuerpo: r.lineas.map((l) => `<p style="margin:6px 0;color:${l[0] === 'ok' ? '#1ABB9C' : '#f56565'}">${l[0] === 'ok' ? '✓' : '✗'} ${esc(l[1])}</p>`).join('') + (r.ok ? '<p class="leyenda">Las fotos pendientes se suben en la siguiente sincronización.</p>' : ''), botones: [{ texto: 'Cerrar', valor: null, clase: 'btn-primary' }] });
+        } catch (e) { toast(e.message, 'error'); } finally { ocupado(''); }
+        break;
+      }
       case 'carpeta-respaldos': api('carpetaRespaldos').catch((e) => toast(e.message, 'error')); break;
     }
     $('#sidebar').classList.remove('open');
@@ -454,7 +463,7 @@
     $('#btn-salir').addEventListener('click', async () => { if (await confirmar('Cerrar sesión', '¿Quieres cerrar tu sesión? Las OT guardadas en esta computadora se conservan.', 'Cerrar sesión')) { await guardarYa(); await api('salir'); await mostrarLogin(''); } });
     $('#btn-tema').addEventListener('click', () => { const n = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', n); try { localStorage.setItem('tema', n); } catch (e) { /* sin almacenamiento */ } });
     $('#busqueda').addEventListener('input', (e) => { S.busqueda = e.target.value; if (S.vista === 'lista') pintarLista(); else if (S.vista === 'detalle') pintarPiezas(); });
-    window.api.alEvento('sync', (r, est) => { S.estado = est; pintarEstado(); pintarSync(r.mensaje, /Error|Sin conexión/.test(r.mensaje)); if (r.sinSesion) mostrarLogin('Tu sesión se cerró o ya no tienes acceso.'); });
+    window.api.alEvento('sync', (r, est) => { S.estado = est; pintarEstado(); pintarSync(r.mensaje, /Error|Sin conexión|sin descargar|sin subir/.test(r.mensaje)); if (r.sinSesion) mostrarLogin('Tu sesión se cerró o ya no tienes acceso.'); });
     window.addEventListener('beforeunload', () => { guardarYa(); });
     setInterval(() => { if (S.estado && S.estado.sesion && (S.vista === 'lista' || S.vista === 'usuarios') && !document.querySelector('.modal-backdrop')) sincronizar(true); }, 60000);
 

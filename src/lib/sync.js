@@ -12,6 +12,7 @@ class Sync {
   constructor(store, supa, tg, prefs) {
     this.store = store; this.supa = supa; this.tg = tg; this.prefs = prefs;
     this.ocupado = false; this._timer = null;
+    this.fotosFaltan = 0; this.fotosError = ''; this.subirFaltan = 0; this.subirError = '';
   }
 
   // ----- estado guardado -----
@@ -93,7 +94,7 @@ class Sync {
     }
     const editor = rol === 'almacenista';
     if (bajar && editor) { const r = await this.supa.consultarRestringido(token); if (r !== null) this.prefs.set('restringido', r); }
-    if (bajar) { await this.supa.registrarAccesoSiToca(token); await this._bajarTodo(editor); }
+    if (bajar) { await this.supa.registrarAccesoSiToca(token); this.fotosFaltan = 0; this.fotosError = ''; await this._bajarTodo(editor); }
     if (editor) {
       const descartadas = await this._empujar();
       // Si se descartó un cambio sin permiso, se baja de inmediato la versión de la nube
@@ -102,7 +103,10 @@ class Sync {
     let usuariosPendientes = -1;
     if (editor && bajar) { try { usuariosPendientes = await this._contarUsuariosPendientes(); } catch (e) { usuariosPendientes = -1; } }
     const pend = this.pendientes();
-    return { mensaje: pend > 0 ? `Pendientes por subir: ${pend}` : `Sincronizado a las ${hhmm()}`, sinSesion: false, usuariosPendientes };
+    let mensaje = pend > 0 ? `Pendientes por subir: ${pend}` : `Sincronizado a las ${hhmm()}`;
+    if (this.subirFaltan > 0) mensaje += ` · ${this.subirFaltan} fotos sin subir: ${this.subirError}`;
+    if (bajar && this.fotosFaltan > 0) mensaje += ` · ${this.fotosFaltan} fotos sin descargar: ${this.fotosError}`;
+    return { mensaje, sinSesion: false, usuariosPendientes, fotosFaltan: this.fotosFaltan };
   }
 
   async _contarUsuariosPendientes() {
@@ -120,7 +124,7 @@ class Sync {
 
   // ----- subir -----
   async _empujar() {
-    let descartadas = 0;
+    let descartadas = 0; this.subirFaltan = 0; this.subirError = '';
     for (const idS of this._set('borradas')) {
       const r = await this.supa.peticion('DELETE', `/rest/v1/ordenes?id=eq.${idS}`, null, await this._tk(), { Prefer: 'return=minimal' });
       if (!r.ok) throw new Error(this.supa.errorDe(r));
@@ -167,6 +171,8 @@ class Sync {
     return descartadas;
   }
 
+  static explicarTelegram(e) { return require('./telegram').Telegram.explicar(e); }
+
   async _subirFotos(o) {
     let todoBien = true;
     for (const x of o.items) for (const nombre of M.fotos(x)) {
@@ -177,7 +183,10 @@ class Sync {
       try {
         const a = await this.tg.subir(clave, datos);
         const m = this._tgMapa(); m[clave] = `${a.fileId}|${a.mensajeId}`; this.prefs.set('tgMapa', m);
-      } catch (e) { todoBien = false; }
+      } catch (e) {
+        todoBien = false; this.subirFaltan++;
+        if (!this.subirError) this.subirError = Sync.explicarTelegram(e);
+      }
     }
     return todoBien;
   }
@@ -219,6 +228,8 @@ class Sync {
     for (const o of this.store.todas()) await this._bajarFotos(o);
   }
 
+  _fotoFallo(motivo) { this.fotosFaltan++; if (!this.fotosError) this.fotosError = motivo; }
+
   async _bajarFotos(o) {
     for (const x of o.items) for (const nombre of M.fotos(x)) {
       if (this.store.existeFoto(nombre)) continue;
@@ -226,12 +237,17 @@ class Sync {
         const dato = this._tgMapa()[`${o.id}/${nombre}`];
         if (dato) {
           const b = await this.tg.bajar(String(dato).split('|')[0], `${o.id}/${nombre}`);
-          if (b.length) this.store.guardarFoto(nombre, b);
+          if (b.length) this.store.guardarFoto(nombre, b); else this._fotoFallo('Telegram devolvió un archivo vacío');
         } else {
           const r = await this.supa.peticion('GET', `/storage/v1/object/authenticated/fotos/${o.id}/${encodeURIComponent(nombre)}`, null, await this._tk());
           if (r.ok && r.cuerpo.length) this.store.guardarFoto(nombre, r.cuerpo);
+          else this._fotoFallo('la foto no está en la nube todavía (el teléfono que la tomó debe sincronizar)');
         }
-      } catch (e) { /* se intenta de nuevo en la siguiente sincronización */ }
+      } catch (e) {
+        let m = e && e.message ? e.message : String(e);
+        if (/Unsupported state|auth/i.test(m)) m = 'la llave de cifrado (TG_FOTOS_KEY) no es la misma que usa Android';
+        this._fotoFallo(m);
+      }
     }
   }
 }

@@ -8,7 +8,7 @@ const SUPABASE = {
   key: 'sb_publishable_SyqWOd6GVH_AtxI4qnIZnw_u6C34uB1'
 };
 
-function leerJson(f) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return {}; } }
+function leerJson(f) { try { return JSON.parse(fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, '')); } catch (e) { return {}; } }
 
 /** Devuelve { supabase, telegram: { token, chat, key } }. */
 function cargar(userData) {
@@ -17,7 +17,7 @@ function cargar(userData) {
   const c = Object.assign({}, emb, loc);
   return {
     supabase: { url: c.SUPABASE_URL || SUPABASE.url, key: c.SUPABASE_KEY || SUPABASE.key },
-    telegram: { token: c.TG_BOT_TOKEN || '', chat: c.TG_CHAT_ID || '', key: c.TG_FOTOS_KEY || '' }
+    telegram: { token: String(c.TG_BOT_TOKEN || '').trim(), chat: String(c.TG_CHAT_ID || '').trim(), key: String(c.TG_FOTOS_KEY || '').trim() }
   };
 }
 module.exports = { cargar, SUPABASE };

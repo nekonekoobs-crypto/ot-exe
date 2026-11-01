@@ -3,6 +3,36 @@
 const crypto = require('crypto');
 
 class Telegram {
+  /** Traduce el error de Telegram a algo que se pueda corregir. */
+  static explicar(e) {
+    const m = e && e.message ? e.message : String(e);
+    if (/no está configurado/i.test(m)) return 'Telegram no está configurado en este .exe (faltan los secretos TG_BOT_TOKEN, TG_CHAT_ID y TG_FOTOS_KEY al compilar)';
+    if (/chat not found/i.test(m)) return 'TG_CHAT_ID es incorrecto o el bot no está en ese chat (escríbele /start al bot y revisa el número del chat)';
+    if (/Unauthorized|Not Found/i.test(m)) return 'TG_BOT_TOKEN es incorrecto';
+    if (/fetch failed|ENOTFOUND|ECONN|ETIMEDOUT/i.test(m)) return 'no se pudo conectar con Telegram (revisa internet o el firewall)';
+    return m;
+  }
+
+  /** Diagnóstico paso a paso. Devuelve { ok, lineas: [[ 'ok'|'mal', texto ]] }. */
+  async probar() {
+    const L = []; const ok = (t) => L.push(['ok', t]); const mal = (t) => L.push(['mal', t]);
+    this.token ? ok('TG_BOT_TOKEN presente') : mal('Falta TG_BOT_TOKEN (secreto vacío o no creado en este repositorio)');
+    this.chat ? ok('TG_CHAT_ID presente (' + this.chat + ')') : mal('Falta TG_CHAT_ID');
+    this.k ? ok('TG_FOTOS_KEY válida (32 bytes)') : mal('TG_FOTOS_KEY falta o no es Base64 de 32 bytes');
+    if (!this.configurado()) return { ok: false, lineas: L };
+    try {
+      const j = await this._api('getMe', Buffer.from('{}'), 'application/json');
+      if (j.ok) ok('Bot encontrado: @' + (j.result && j.result.username)); else { mal('TG_BOT_TOKEN es incorrecto (Telegram dice: ' + (j.description || 'sin detalle') + ')'); return { ok: false, lineas: L }; }
+    } catch (e) { mal(Telegram.explicar(e)); return { ok: false, lineas: L }; }
+    let a = null;
+    try { a = await this.subir('prueba/ping', Buffer.from('ping')); ok('Subida de prueba al chat correcta'); }
+    catch (e) { mal('No se pudo subir: ' + Telegram.explicar(e)); return { ok: false, lineas: L }; }
+    try { const b = await this.bajar(a.fileId, 'prueba/ping'); b.toString() === 'ping' ? ok('Descarga y descifrado de prueba correctos') : mal('La descarga no coincide'); }
+    catch (e) { mal('No se pudo bajar/descifrar: ' + Telegram.explicar(e)); }
+    try { await this.borrar(a.mensajeId); } catch (e) { /* no pasa nada */ }
+    return { ok: !L.some((x) => x[0] === 'mal'), lineas: L };
+  }
+
   /** cfg: { token, chat, key (base64 de 32 bytes), base (opcional, para pruebas) } */
   constructor(cfg) {
     this.token = String((cfg && cfg.token) || '').trim();

@@ -65,6 +65,7 @@ function crearManejadores(sv, d) {
     const r = sv.respaldoRestaurar(sv._respaldoPend, !!subir); sv._respaldoPend = null; return r;
   });
 
+  h('probarTelegram', () => sv.tg.probar());
   h('ocr', (datos) => d.ocr.leer(datos));
   h('usuarios', () => sv.usuarios());
   h('cambiarRol', (e, r) => sv.cambiarRol(e, r));
