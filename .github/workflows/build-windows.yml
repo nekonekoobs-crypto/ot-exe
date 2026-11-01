@@ -15,6 +15,26 @@ jobs:
         with:
           node-version: 20
 
+      # Falla aquí, con un mensaje claro, si falta algún secreto (se muestran solo los largos, nunca los valores)
+      - name: Verificar secretos
+        shell: pwsh
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_FOTOS_KEY: ${{ secrets.TG_FOTOS_KEY }}
+        run: |
+          $fallo = $false
+          foreach ($n in 'TG_BOT_TOKEN','TG_CHAT_ID','TG_FOTOS_KEY') {
+            $v = [Environment]::GetEnvironmentVariable($n)
+            if ([string]::IsNullOrWhiteSpace($v)) { Write-Host "::error::Falta el secreto $n en este repositorio (Settings > Secrets and variables > Actions > Repository secrets)"; $fallo = $true }
+            else { Write-Host "$n presente ($($v.Trim().Length) caracteres)" }
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:TG_FOTOS_KEY)) {
+            try { $b = [Convert]::FromBase64String($env:TG_FOTOS_KEY.Trim()); if ($b.Length -ne 32) { Write-Host "::error::TG_FOTOS_KEY debe ser Base64 de 32 bytes y trae $($b.Length)"; $fallo = $true } }
+            catch { Write-Host "::error::TG_FOTOS_KEY no es Base64 válido"; $fallo = $true }
+          }
+          if ($fallo) { exit 1 }
+
       # Los datos de Telegram vienen de los secretos de GitHub; no están en el código
       - name: Crear config.json con los secretos
         shell: pwsh
@@ -43,6 +63,15 @@ jobs:
         run: npm run dist
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      # Comprueba que el instalador sí lleva la configuración y el idioma del OCR
+      - name: Verificar el contenido del paquete
+        shell: pwsh
+        run: |
+          $lista = npx --yes @electron/asar list dist/win-unpacked/resources/app.asar | Out-String
+          if ($lista -notmatch 'config\.json') { Write-Host "::error::src/config.json NO quedó dentro del paquete"; exit 1 }
+          if (-not (Test-Path dist/win-unpacked/resources/tessdata/spa.traineddata)) { Write-Host "::error::Falta tessdata/spa.traineddata en el paquete"; exit 1 }
+          Write-Host "Paquete correcto: lleva config.json y el idioma español"
 
       - uses: actions/upload-artifact@v4
         with:
