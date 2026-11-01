@@ -48,5 +48,20 @@ const { Store } = require('../src/lib/store'); const { Prefs } = require('../src
   const G = nuevo('g'); sb.usuarios['google@x.com'] = { rol: 'almacenista' }; assert.strictEqual((await G.supa.entrarConCodigo('codigo-bueno', 'v')).email, 'google@x.com'); await assert.rejects(G.supa.entrarConCodigo('malo', 'v'), /Google/);
   // renovación de token
   const s = A.supa.sesion(); s.expiraMs = 0; A.supa.guardarSesion(s); assert.strictEqual(await A.supa.tokenVigente(), 'tok:a@x.com'); assert.ok(A.supa.sesion().expiraMs > Date.now());
+  // llave de cifrado distinta: las fotos no se pueden abrir y la app lo dice
+  const X = nuevo('x'); X.tg.k = Buffer.alloc(32, 9); await X.supa.entrarConClave('b@x.com', '2');
+  const ob = M.nuevaOrden({ id: 4004, ot: 'F', items: [M.nuevoItem({ id: 1, concepto: 'Faro', baja: true, fotoBaja: '4004_1.jpg' })] }); B.store.guardar(ob); B.store.guardarFoto('4004_1.jpg', foto); B.sync.marcarPendiente(4004); await B.sync.sincronizar(true);
+  r = await X.sync.sincronizar(true); assert.ok(/1 fotos sin descargar: la llave de cifrado/.test(r.mensaje), r.mensaje);
+  X.tg.token = ''; r = await X.sync.sincronizar(true); assert.ok(/sin descargar: Telegram no está configurado/.test(r.mensaje), r.mensaje);
+  // Telegram sin configurar o con datos malos: se dice por qué la foto no sube y la OT queda pendiente
+  const Y = nuevo('y'); await Y.supa.entrarConClave('a@x.com', '1'); Y.tg.token = '';
+  Y.store.guardar(M.nuevaOrden({ id: 5005, ot: 'Y', items: [M.nuevoItem({ id: 1, concepto: 'Faro', baja: true, fotoBaja: '5005_1.jpg' })] })); Y.store.guardarFoto('5005_1.jpg', foto); Y.sync.marcarPendiente(5005);
+  r = await Y.sync.sincronizar(false); assert.ok(/1 fotos sin subir: Telegram no está configurado/.test(r.mensaje), r.mensaje); assert.ok(Y.sync.pendientes() >= 1);
+  Y.tg.token = 'T'; Y.tg.chat = 'x'; Y.tg.base = 'http://127.0.0.1:9'; r = await Y.sync.sincronizar(false); assert.ok(/sin subir: no se pudo conectar con Telegram/.test(r.mensaje), r.mensaje);
+  Y.tg.base = tgF.base; r = await Y.sync.sincronizar(false); assert.ok(/Sincronizado/.test(r.mensaje), r.mensaje); assert.strictEqual(Y.sync.pendientes(), 0);
+  // diagnóstico de Telegram
+  const D1 = await Y.tg.probar(); assert.ok(D1.ok, JSON.stringify(D1)); assert.ok(D1.lineas.some((l) => /@mi_bot/.test(l[1])));
+  const t0 = new Telegram({ token: '', chat: '', key: '' }); const D2 = await t0.probar(); assert.ok(!D2.ok && D2.lineas.filter((l) => l[0] === 'mal').length === 3);
+  const t1 = new Telegram({ token: 'MALO', chat: '1', key: Buffer.alloc(32, 1).toString('base64'), base: tgF.base }); const D3 = await t1.probar(); assert.ok(!D3.ok && /TG_BOT_TOKEN es incorrecto/.test(D3.lineas.pop()[1]));
   console.log('OK sync completo'); tgF.srv.close(); sb.srv.close();
 })().catch((e) => { console.error(e); process.exit(1); });

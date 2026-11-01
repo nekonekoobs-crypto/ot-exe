@@ -6,6 +6,7 @@ const escuchar = (s) => new Promise((ok) => s.listen(0, '127.0.0.1', () => ok('h
 async function fakeTelegram() {
   const guardados = {}; const borrados = []; let n = 100;
   const srv = http.createServer(async (q, s) => { const b = await leer(q);
+    if (q.url.endsWith('/getMe')) return s.end(JSON.stringify(q.url.includes('botMALO') ? { ok: false, description: 'Not Found' } : { ok: true, result: { username: 'mi_bot' } }));
     if (q.url.endsWith('/sendDocument')) { const ini = b.indexOf('octet-stream\r\n\r\n') + 16; const fin = b.lastIndexOf('\r\n--'); const id = 'F' + (++n); guardados[id] = b.subarray(ini, fin); s.end(JSON.stringify({ ok: true, result: { message_id: n, document: { file_id: id } } })); }
     else if (q.url.endsWith('/getFile')) { const id = JSON.parse(b).file_id; s.end(JSON.stringify(guardados[id] ? { ok: true, result: { file_path: 'docs/' + id } } : { ok: false })); }
     else if (q.url.includes('/file/bot')) s.end(guardados[q.url.split('/').pop()]);
